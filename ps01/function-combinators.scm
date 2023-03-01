@@ -1,3 +1,7 @@
+;;;; Author: Andi Liu (the boy who asks a lot of questions)
+;;;; Date: Feb 24
+;;;; Edited and executed on a remote Ubuntu machine, using Geiser-mit plugin for Spacemacs
+
 #| -*-Scheme-*-
 
 Copyright (C) 2019 Chris Hanson and Gerald Jay Sussman
@@ -214,7 +218,7 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
                       (procedure-arity-max a)))
         (procedure-arity-min a))))
 
-; Test funcs
+; Test cases
 (define (foo-list a b) (list `foo a b))
 (define (bar-pair x) (values (list `bar x)(list `baz x)))
 (define (identity x) x)
@@ -257,3 +261,4 @@ along with SDF.  If not, see <https://www.gnu.org/licenses/>.
 (define 2to2 (lambda (x y) (values y x)))
 (define 2to1 (lambda (x y) (+ x y)))
 ((compose 2to1 2to2) 3 4)
+;Value: 7
