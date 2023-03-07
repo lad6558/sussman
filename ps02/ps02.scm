@@ -241,3 +241,14 @@
 
 
 
+(define (unit-circle x)
+  (vector (sin x) (cos x)))
+
+(install-arithmetic! func-before-vec)
+;; ((magnitude unit-circle) 'a)
+;; ((magnitude (vector sin cos)) 'a)
+
+;; Simply typing two functions in the same pair of parentheses doesn't chain them
+;; To get it working is very simple: just use compose
+((compose magnitude unit-circle) 'a)
+;Value: (sqrt (+ (* (sin a) (sin a)) (* (cos a) (cos a))))
