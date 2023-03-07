@@ -15,27 +15,6 @@
 ;; (load "~/sussman/sdf/manager/load" )
 ;; (manage `new `combining-arithmetics)
 
-;; make-arithmetic signature
-;; (make-arithmetic name
-;;                  domain-predicate
-;;                  base-arithmetic-packages
-;;                  map-of-constant-name-to-constant
-;;                  map-of-operator-name-to-operation)
-
-;; (define (pure-function-extender codomain-arithmetic)
-;;   (make-arithmetic `pure-function function?
-;;                    (list codomain-arithmetic)
-;;                    (lambda (name codomain-constant) ; *** see below
-;;                      (lambda args codomain-constant))
-;;                    (lambda (operator codomain-operation)
-;;                      (simple-operation operator function?
-;;                                        (lambda functions
-;;                                          (lambda args
-;;                                            (apply-operation codomain-operation
-;;                                                             (map (lambda (function)
-;;                                                                    (apply function args))
-;;                                                                  functions))))))))
-
 (define (function-extender codomain-arithmetic)
   (let ((codomain-predicate
          (arithmetic-domain-predicate codomain-arithmetic)))
@@ -126,7 +105,7 @@
   (lambda (vec1 vec2)
     (let ((v1 (vector->list vec1))
           (v2 (vector->list vec2)))
-      (apply + (map * v1 v2)))))
+      (apply + (map * v1 v2))))) ;looking back, I coulda used vector-map
 
 ;; I wonder why we have to pass in + and * here
 (define (vector-magnitude-maker + * sqrt)
@@ -134,6 +113,37 @@
     (define (vector-magnitude v)
       (sqrt (dot-product v v)))
     vector-magnitude))
+
+; Assume a vector exists in the list
+(define (get-vector-from-list vec-list)
+  (if (vector? (car vec-list))
+      (car vec-list)
+      (get-vector-from-list (cdr vec-list))))
+
+(define (expand-to-list element remaining-length)
+  (if (= remaining-length 0)
+      '()
+      (cons element (expand-to-list element (- remaining-length 1)))))
+
+(define (expand-to-vector element remaining-length)
+  (list->vector (expand-to-list element remaining-length)))
+
+(define (transform-vector-list elt-list)
+  (let ((vector-len(vector-length (get-vector-from-list elt-list))))
+    (transform-vector-list* elt-list vector-len)))
+
+(define (transform-vector-list* elt-list vector-len)
+  (if (= (length elt-list) 0)
+      '()
+      (let* ((elt (car elt-list))
+             (transformed-elt
+              (if (vector? elt)
+                   elt
+                   (expand-to-vector elt vector-len))))
+        (cons transformed-elt (transform-vector-list* (cdr elt-list) vector-len)))))
+
+;(transform-vector-list '(5 #(1 3 3) 7 ))
+;Value: (#(5 5 5) #(1 3 3) #(7 7 7))
 
 (define (vector-extender codomain-arithmetic)
   (let ((codomain-predicate
@@ -150,28 +160,51 @@
                        ;;     ;; (pp operator)
                        ;;     (display "This is not multi")
                        ;;     )
-                       (make-operation
+
+                       (operation-union
                         operator
-                        ;; (any-arg
-                        ;;  (operator-arity operator)
-                        ;;  vector?
-                        ;;  codomain-predicate)
-                        (all-args
-                         (operator-arity operator)
-                         vector?)
-                        (lambda things
-                          (case operator
-                            ((*) (apply (dot-product-maker + *) things))
-                            ((magnitude) (apply (vector-magnitude-maker + * sqrt) things))
-                            (else
-                             (apply (vector-element-wise (operation-procedure codomain-operation))
-                                    things)))))))))
-;; I thought about using case here to hijack result-vector
-;; but that is not very generalizable and results in complicated code
-;; so I thought I better use the magnitude-maker to hijack the operator instead
-;; Deprecated code:
-;; (case operator
-;;   ((*) ))
+
+                        ;; First case: all-vector case
+                        (make-operation
+                         operator
+                         ;; (any-arg
+                         ;;  (operator-arity operator)
+                         ;;  vector?
+                         ;;  codomain-predicate)
+                         (all-args
+                          (operator-arity operator)
+                          vector?)
+                         (lambda things
+
+                           (case operator
+                             ((*) (apply (dot-product-maker + *) things))
+                             ((magnitude) (apply (vector-magnitude-maker + * sqrt) things))
+                             (else
+                              (apply (vector-element-wise (operation-procedure codomain-operation))
+                                     things)
+                              ;; I thought about using case here to hijack result-vector
+                              ;; but that is not very generalizable and results in complicated code
+                              ;; so I thought I better use the magnitude-maker to hijack the operator instead
+                              ;; Deprecated code:
+                              ;; (case operator
+                              ;;   ((*) ))
+                              ))))
+                        ;; Below code handles not-all-vector case
+                        ;; Copies all the non-vecs many times to make them vecs
+                        ;; Not only scalar product, also broadcasts addition
+                        ;; This doesn't handle the case where vecs have different len
+                        ;; which is not well-defined anyway
+                        (make-operation
+                         operator
+                         (any-arg
+                          (operator-arity operator)
+                          vector?
+                          codomain-predicate)
+                         (lambda things
+                              (apply
+                               (vector-element-wise
+                                (operation-procedure codomain-operation))
+                                     (transform-vector-list things)))))))))
 
 (define vector-arithmetic (extend-arithmetic vector-extender combined-arithmetic))
 (install-arithmetic! vector-arithmetic)
@@ -179,18 +212,32 @@
 (define v12 (vector 1 2))
 (define v13 (vector 1 3))
 ;(+ v12 v13) -> #(2 5)
-
-;(+(+ #(1 `a) #(1 1))
-;Value: #(2 (+ (quasiquote a) 1))
+;; (+(+ #(1 `a) #(1 1))
+;; ;Value: #(2 (+ (quasiquote a) 1))
+;; (* v12 v13)
+;; ;Value: 7
+;; (+ 1 v12)
+;; ;Value: #(2 3)
+;; (* 4 v12)
+;; ;Value: #(4 8)
+;; (* 4 v12 5)
+;; ;Value: #(20 40)
+;; (* 4 v12 5 v13)
+;; ;Value: 140
 
 ;; 1 (user) => (+ #(1 2) #('a 5) #('a 3))
 ;;;Value: #((+ (+ 1 (quote a)) (quote a)) 10)
 ;; 1 (user) => (+ #(1 'a))
 ;;;Value: #(1 (quote a))
 
+(define vec-before-func
+  (extend-arithmetic
+   function-extender
+   (extend-arithmetic vector-extender combined-arithmetic)))
+(define func-before-vec
+  (extend-arithmetic
+   vector-extender
+   (extend-arithmetic function-extender combined-arithmetic)))
 
-;; (install-arithmetic! (extend-arithmetic function-extender combined-arithmetic))
 
 
-;; (define function-arithmetic (extend-arithmetic function-extender combined-arithmetic))
-;; (install-arithmetic! function-arithmetic)
