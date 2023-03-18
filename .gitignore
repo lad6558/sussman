@@ -16,5 +16,6 @@
 *.wx64fsl
 *.wx32fsl
 *.pdf
+*.zip
 readings/**
 .DS_Store
